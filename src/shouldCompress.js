@@ -7,7 +7,6 @@ function shouldCompress(req) {
 
   if (!originType.startsWith('image')) return false;
   if (originSize === 0) return false;
-  if (req.headers.range) return false;
   if (webp && originSize < MIN_COMPRESS_LENGTH) return false;
   if (
     !webp &&
