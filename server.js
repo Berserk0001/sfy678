@@ -19,10 +19,9 @@ fastify.get('/', proxy);
 fastify.get('/favicon.ico', (req, reply) => reply.code(204).send());
 
 // Start the server
-fastify.listen({ port: PORT }, (err, address) => {
+fastify.listen({host: '0.0.0.0' , port: PORT }, function (err, address) {
   if (err) {
-    fastify.log.error(err);
-    process.exit(1);
+    fastify.log.error(err)
+    process.exit(1)
   }
-  fastify.log.info(`Server listening on ${address}`);
 });
