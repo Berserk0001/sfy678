@@ -1,31 +1,39 @@
+"use strict";
+/*
+ * compress.js
+ * A module that compress an image.
+ * compress(httpRequest, httpResponse, ReadableStream);
+ */
 const sharp = require('sharp');
 const redirect = require('./redirect');
 
-function compress(req, res, input) {
+const sharpStream = () => sharp({ animated: !process.env.NO_ANIMATE, unlimited: true });
+
+function compress(req, reply, input) {
   const format = req.params.webp ? 'webp' : 'jpeg';
-  let compressionQuality = req.params.quality * 0.05;
-       
-  req.params.quality = Math.ceil(compressionQuality);
 
+  input.body.pipe(
+    sharpStream()
+      .grayscale(req.params.grayscale)
+      .toFormat(format, {
+        quality: req.params.quality,
+        progressive: true,
+        optimizeScans: true
+      })
+      .toBuffer((err, output, info) => {
+        if (err || !info) {
+          return redirect(req, reply);
+        }
 
-     sharp(input)
-    .grayscale(req.params.grayscale)
-    .toFormat(format, {
-      quality: req.params.quality,
-      effort: 1
-      
-    })
-    .toBuffer((err, output, info) => {
-      if (err || !info || res.headersSent) {
-        throw new Error(null);
-      }
-
-      res.setHeader('content-type', `image/${format}`);
-      res.setHeader('content-length', info.size);
-      res.setHeader('x-original-size', req.params.originSize);
-      res.setHeader('x-bytes-saved', req.params.originSize - info.size);
-      res.status(200).send(output);
-    });
+        reply
+          .header('content-type', 'image/' + format)
+          .header('content-length', info.size)
+          .header('x-original-size', req.params.originSize)
+          .header('x-bytes-saved', req.params.originSize - info.size)
+          .code(200)
+          .send(output);
+      })
+  );
 }
 
 module.exports = compress;
