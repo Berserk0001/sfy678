@@ -2,31 +2,37 @@
 /*
  * compress.js
  * A module that compresses an image.
- * compress(httpRequest, httpResponse, ReadableStream);
  */
 const sharp = require('sharp');
 const redirect = require('./redirect');
+const { pipeline } = require('stream');
+const { promisify } = require('util');
+
+// Convert pipeline to promise-based function
+const streamPipeline = promisify(pipeline);
 
 const sharpStream = () => sharp({ animated: !process.env.NO_ANIMATE, unlimited: true });
 
 async function compress(req, reply, input) {
-  const format = req.params.webp ? 'webp' : 'jpeg';
+  try {
+    // Create a sharp stream with the required transformations
+    const transform = sharpStream()
+      .grayscale(req.params.grayscale)
+      .toFormat(req.params.webp ? 'webp' : 'jpeg', {
+        quality: req.params.quality,
+        progressive: true,
+        optimizeScans: true,
+      });
 
-  // Convert the input stream into a buffer first
-  const chunks = [];
-  for await (const chunk of input) {
-    chunks.push(chunk);
+    // Use pipeline to handle stream and buffer conversion
+    const outputBuffer = await streamPipeline(input, transform);
+
+    const info = await transform.metadata(); // Get metadata after the transformation
+
+    _sendResponse(null, outputBuffer, info, req.params.webp ? 'webp' : 'jpeg', req, reply);
+  } catch (err) {
+    _sendResponse(err, null, null, null, req, reply);
   }
-  const buffer = Buffer.concat(chunks);
-
-  sharpStream()
-    .grayscale(req.params.grayscale)
-    .toFormat(format, {
-      quality: req.params.quality,
-      progressive: true,
-      optimizeScans: true,
-    })
-    .toBuffer((err, output, info) => _sendResponse(err, output, info, format, req, reply));
 }
 
 function _sendResponse(err, output, info, format, req, reply) {
