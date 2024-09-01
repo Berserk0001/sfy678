@@ -5,7 +5,7 @@ const DEFAULT_QUALITY = 40;
 function params(request, reply, next) {
   let url = request.query.url;
   if (!url) {
-    return reply.code(400).send({ error: 'URL is required' });
+    return reply.code(200).send("bandwidth-hero-proxy");
   }
 
   request.body = request.body || {}; // Ensure body exists
