@@ -1,27 +1,35 @@
 #!/usr/bin/env node
 'use strict';
-const fastify = require('fastify')({
-  logger: true,
-  trustProxy: true  // Enables trust proxy, similar to Express's `app.enable('trust proxy')`
-});
+const fastify = require('fastify')({ logger: true });
 const params = require('./src/params');
 const proxy = require('./src/proxy');
 
 const PORT = process.env.PORT || 8080;
 
-// Middleware to parse query parameters and set request params
-fastify.addHook('preHandler', params);
+// Register fastify-multipart for handling multipart/form-data
+fastify.register(require('@fastify/multipart'), { 
+  attachFieldsToBody: true 
+});
 
-// Default route for handling image requests
-fastify.get('/', proxy);
+// Route for processing images
+fastify.get('/', async (request, reply) => {
+  await params(request, reply);
+  return proxy(request.raw, reply);
+});
 
-// Handling favicon requests, responding with 204 No Content
-fastify.get('/favicon.ico', (req, reply) => reply.code(204).send());
+// Route for favicon
+fastify.get('/favicon.ico', async (request, reply) => {
+  reply.code(204).send();
+});
 
 // Start the server
-fastify.listen({host: '0.0.0.0' , port: PORT }, function (err, address) {
-  if (err) {
-    fastify.log.error(err)
-    process.exit(1)
+const start = async () => {
+  try {
+    await fastify.listen(PORT, '0.0.0.0');
+    fastify.log.info(`server listening on ${fastify.server.address().port}`);
+  } catch (err) {
+    fastify.log.error(err);
+    process.exit(1);
   }
-});
+};
+start();
