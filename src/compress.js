@@ -1,50 +1,42 @@
 "use strict";
-/*
- * compress.js
- * A module that compresses an image.
- */
-const sharp = require('sharp');
-const redirect = require('./redirect');
-const { pipeline } = require('stream');
-const { promisify } = require('util');
 
-// Convert pipeline to promise-based function
-const streamPipeline = promisify(pipeline);
+const sharp = require('sharp');
 
 const sharpStream = () => sharp({ animated: !process.env.NO_ANIMATE, unlimited: true });
 
 async function compress(req, reply, input) {
+  const format = req.body.webp ? 'webp' : 'jpeg';
+
   try {
-    // Create a sharp stream with the required transformations
-    const transform = sharpStream()
-      .grayscale(req.params.grayscale)
-      .toFormat(req.params.webp ? 'webp' : 'jpeg', {
-        quality: req.params.quality,
+    const result = await input.pipe(sharpStream()
+      .grayscale(req.body.grayscale)
+      .toFormat(format, {
+        quality: req.body.quality,
         progressive: true,
-        optimizeScans: true,
-      });
+        optimizeScans: true
+      })
+    ).toBuffer();
 
-    // Use pipeline to handle stream and buffer conversion
-    const outputBuffer = await streamPipeline(input, transform);
-
-    const info = await transform.metadata(); // Get metadata after the transformation
-
-    _sendResponse(null, outputBuffer, info, req.params.webp ? 'webp' : 'jpeg', req, reply);
+    reply.headers({
+      'content-type': `image/${format}`,
+      'content-length': result.length,
+      'x-original-size': req.body.originSize,
+      'x-bytes-saved': req.body.originSize - result.length
+    });
+    reply.code(200).send(result);
   } catch (err) {
-    _sendResponse(err, null, null, null, req, reply);
+    console.error('Compression error:', err);
+    redirect(req, reply);
   }
 }
 
+module.exports = compress;
+
+// Assuming redirect.js needs a small adjustment for Fastify
+const redirect = require('./redirect');
 function _sendResponse(err, output, info, format, req, reply) {
   if (err || !info) return redirect(req, reply);
 
-  reply
-    .header('content-type', 'image/' + format)
-    .header('content-length', info.size)
-    .header('x-original-size', req.params.originSize)
-    .header('x-bytes-saved', req.params.originSize - info.size)
-    .status(200)
-    .send(output);
+  // No need for direct manipulation of headers or status here,
+  // as we're now using reply methods directly in the compress function.
 }
-
-module.exports = compress;
