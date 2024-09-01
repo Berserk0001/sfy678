@@ -1,6 +1,6 @@
 "use strict";
 function redirect(req, res) {
-  if (res.headersSent) return;
+  if (res.sent) return;
 
   res.header('content-length', 0);
   res.removeHeader('cache-control');
