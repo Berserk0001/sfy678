@@ -1,42 +1,53 @@
 "use strict";
-
+/*
+ * compress.js
+ * A module that compresses an image.
+ * compress(httpRequest, httpResponse, ReadableStream);
+ */
 const sharp = require('sharp');
+const redirect = require('./redirect');
 
 const sharpStream = () => sharp({ animated: !process.env.NO_ANIMATE, unlimited: true });
 
-async function compress(req, reply, input) {
-  const format = req.body.webp ? 'webp' : 'jpeg';
+function compress(req, reply, input) {
+  const format = req.params.webp ? 'webp' : 'jpeg';
 
-  try {
-    const result = await input.pipe(sharpStream()
-      .grayscale(req.body.grayscale)
-      .toFormat(format, {
-        quality: req.body.quality,
-        progressive: true,
-        optimizeScans: true
-      })
-    ).toBuffer();
-
-    reply.headers({
-      'content-type': `image/${format}`,
-      'content-length': result.length,
-      'x-original-size': req.body.originSize,
-      'x-bytes-saved': req.body.originSize - result.length
+  input.body
+    .pipe(
+      sharpStream()
+        .grayscale(req.params.grayscale)
+        .toFormat(format, {
+          quality: req.params.quality,
+          progressive: true,
+          optimizeScans: true,
+        })
+    )
+    .toBuffer((err, output, info) => {
+      if (reply.sent) return; // Prevent sending the reply if already sent
+      _sendResponse(err, output, info, format, req, reply);
     });
-    reply.code(200).send(result);
-  } catch (err) {
-    console.error('Compression error:', err);
-    redirect(req, reply);
+
+  input.body.on('error', () => {
+    if (!reply.sent) {
+      reply.raw.destroy();
+    }
+  });
+}
+
+function _sendResponse(err, output, info, format, req, reply) {
+  if (err || !info) {
+    if (!reply.sent) return redirect(req, reply);
+  }
+
+  if (!reply.sent) {
+    reply
+      .header('content-type', 'image/' + format)
+      .header('content-length', info.size)
+      .header('x-original-size', req.params.originSize)
+      .header('x-bytes-saved', req.params.originSize - info.size)
+      .status(200)
+      .send(output);
   }
 }
 
 module.exports = compress;
-
-// Assuming redirect.js needs a small adjustment for Fastify
-const redirect = require('./redirect');
-function _sendResponse(err, output, info, format, req, reply) {
-  if (err || !info) return redirect(req, reply);
-
-  // No need for direct manipulation of headers or status here,
-  // as we're now using reply methods directly in the compress function.
-}
