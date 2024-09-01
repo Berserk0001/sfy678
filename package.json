@@ -10,8 +10,8 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "@fastify/multipart": "^5.1.0",  // Added for multipart/form-data handling
-    "fastify": "^4.0.0",            // Changed from express to fastify
+    "@fastify/multipart": "^5.1.0",
+    "fastify": "^4.0.0",
     "lodash": "^4.17.21",
     "sharp": "^0.32.1",
     "undici": "^5.22.1"
