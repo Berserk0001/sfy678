@@ -1,37 +1,35 @@
 #!/usr/bin/env node
 'use strict';
-
 const fastify = require('fastify')({ logger: true });
 const params = require('./src/params');
 const proxy = require('./src/proxy');
 
 const PORT = process.env.PORT || 8080;
 
-// Register fastify-multipart for handling multipart/form-data
-fastify.register(require('@fastify/multipart'), { 
-  attachFieldsToBody: true 
-});
-
-// Route for processing images
-fastify.get('/', async (request, reply) => {
-  await params(request, reply);
-  return proxy(request.raw, reply);
-});
-
-// Route for favicon
-fastify.get('/favicon.ico', async (request, reply) => {
-  reply.code(204).send();
-});
-
-// Start the server
-const start = async () => {
+fastify.get('/', async (req, reply) => {
   try {
-    await fastify.listen({ host: '0.0.0.0', port: PORT });
-    console.log(`Listening on ${PORT}`);
+    await params(req, reply);
+    if (!reply.sent) {
+      return proxy(req, reply);
+    }
   } catch (err) {
+    fastify.log.error(err);
+    if (!reply.sent) {
+      reply.status(500).send('Internal Server Error');
+    }
+  }
+});
+
+fastify.get('/favicon.ico', (req, reply) => {
+  if (!reply.sent) {
+    reply.status(204).send();
+  }
+});
+
+fastify.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
+  if (err) {
     fastify.log.error(err);
     process.exit(1);
   }
-};
-
-start();
+  fastify.log.info(`Server listening at ${address}`);
+});
