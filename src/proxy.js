@@ -1,5 +1,4 @@
 const fetch = require('node-fetch');
-// TODO: drop lodash.pick in favor of a native destructure.
 const pick = require('lodash.pick');
 const shouldCompress = require('./shouldCompress');
 const redirect = require('./redirect');
@@ -7,34 +6,36 @@ const compress = require('./compress');
 const bypass = require('./bypass');
 const copyHeaders = require('./copyHeaders');
 
-function proxy(req, res) {
-    fetch(
-        req.params.url,
-        {
+async function proxy(request, reply) {
+    try {
+        const response = await fetch(request.params.url, {
             headers: {
-                ...pick(req.headers, ['cookie', 'dnt', 'referer']),
+                ...pick(request.headers, ['cookie', 'dnt', 'referer']),
                 'user-agent': 'Bandwidth-Hero Compressor',
-                'x-forwarded-for': req.headers['x-forwarded-for'] || req.ip,
+                'x-forwarded-for': request.headers['x-forwarded-for'] || request.ip,
                 via: '1.1 bandwidth-hero'
             },
-        })
-        .then(origin => {
-            if (!origin.ok) {
-                return redirect(req, res);
-            }
-            req.params.originType = origin.headers.get('content-type') || '';
-            origin.buffer().then(buffer => {
-                req.params.originSize = buffer.length;
-                copyHeaders(origin, res);
-                res.setHeader('content-encoding', 'identity');
-                if (shouldCompress(req)) {
-                    compress(req, res, buffer)
-                } else {
-                    bypass(req, res, buffer)
-                }
-            })
-        })
-        .catch(e => console.log(e));
+        });
+
+        if (!response.ok) {
+            return redirect(request, reply);
+        }
+
+        request.params.originType = response.headers.get('content-type') || '';
+        const buffer = await response.buffer();
+        request.params.originSize = buffer.length;
+        copyHeaders(response, reply);
+        reply.header('content-encoding', 'identity');
+
+        if (shouldCompress(request)) {
+            compress(request, reply, buffer);
+        } else {
+            bypass(request, reply, buffer);
+        }
+    } catch (e) {
+        console.log(e);
+        redirect(request, reply);
+    }
 }
 
 module.exports = proxy;
