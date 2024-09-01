@@ -11,7 +11,10 @@ fastify.register(require('@fastify/formbody'))
 fastify.get('/', { preHandler: params }, proxy);
 fastify.get('/favicon.ico', (req, res) => res.status(204).send());
 
-fastify.listen({ port: PORT }, (err, address) => {
-  if (err) throw err
-  console.log(`Server listening at ${address}`)
-})
+// Start the server
+  fastify.listen({host: '0.0.0.0' , port: PORT }, function (err, address) {
+  if (err) {
+    fastify.log.error(err)
+    process.exit(1)
+  }
+});
