@@ -26,10 +26,10 @@ fastify.get('/favicon.ico', async (request, reply) => {
 // Start the server
 const start = async () => {
   try {
-    await app.listen({ host: '0.0.0.0', port: PORT });
+    await fastify.listen({ host: '0.0.0.0', port: PORT });
     console.log(`Listening on ${PORT}`);
   } catch (err) {
-    app.log.error(err);
+    fastify.log.error(err);
     process.exit(1);
   }
 };
