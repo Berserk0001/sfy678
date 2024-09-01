@@ -1,19 +1,20 @@
 "use strict";
+
 const DEFAULT_QUALITY = 40;
 
-function params(req, reply, done) {
-  let url = req.query.url;
+function params(request, reply, next) {
+  let url = request.query.url;
   if (!url) {
-    reply.send('bandwidth-hero-proxy');
-    return;
+    return reply.code(400).send({ error: 'URL is required' });
   }
 
-  req.params.url = decodeURIComponent(url);
-  req.params.webp = !req.query.jpeg;
-  req.params.grayscale = req.query.bw != 0;
-  req.params.quality = parseInt(req.query.l, 10) || DEFAULT_QUALITY;
+  request.body = request.body || {}; // Ensure body exists
+  request.body.url = decodeURIComponent(url);
+  request.body.webp = !request.query.jpeg;
+  request.body.grayscale = request.query.bw != 0;
+  request.body.quality = parseInt(request.query.l, 10) || DEFAULT_QUALITY;
 
-  done();
+  next();
 }
 
 module.exports = params;
