@@ -26,7 +26,7 @@ fastify.get('/favicon.ico', (req, reply) => {
   }
 });
 
-fastify.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
+fastify.listen({ host: '0.0.0.0' , port: PORT }, (err, address) => {
   if (err) {
     fastify.log.error(err);
     process.exit(1);
