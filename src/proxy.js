@@ -11,73 +11,82 @@ const redirect = require("./redirect");
 const compress = require("./compress");
 const copyHeaders = require("./copyHeaders");
 
-async function proxy(req, reply) {
-  if (
-    req.headers["via"] == "1.1 bandwidth-hero" &&
-    ["127.0.0.1", "::1"].includes(req.headers["x-forwarded-for"] || req.ip)
-  ) return redirect(req, reply);
 
-  try {
-    let origin = await undici.request(req.params.url, {
-      headers: {
-        ...pick(req.headers, ["cookie", "dnt", "referer", "range"]),
-        "user-agent": "Bandwidth-Hero Compressor",
-        "x-forwarded-for": req.headers["x-forwarded-for"] || req.ip,
-        via: "1.1 bandwidth-hero",
-      },
-      maxRedirections: 4,
-    });
-
-    _onRequestResponse(origin, req, reply);
-  } catch (err) {
-    _onRequestError(req, reply, err);
-  }
-}
-
-function _onRequestError(req, reply, err) {
-  if (reply.sent) return; // Prevent sending the reply if already sent
-
-  if (err.code === "ERR_INVALID_URL") return reply.status(400).send("Invalid URL");
-
-  redirect(req, reply);
-  console.error(err);
-}
-
-function _onRequestResponse(origin, req, reply) {
-  if (reply.sent) return; // Prevent sending the reply if already sent
-
-  if (origin.statusCode >= 400) return redirect(req, reply);
-
-  if (origin.statusCode >= 300 && origin.headers.location) return redirect(req, reply);
-
-  copyHeaders(origin, reply);
-
-  reply
-    .header("content-encoding", "identity")
-    .header("Access-Control-Allow-Origin", "*")
-    .header("Cross-Origin-Resource-Policy", "cross-origin")
-    .header("Cross-Origin-Embedder-Policy", "unsafe-none");
-
-  req.params.originType = origin.headers["content-type"] || "";
-  req.params.originSize = origin.headers["content-length"] || "0";
-
-  origin.body.on('error', () => {
-    if (!reply.sent) {
-      reply.raw.destroy();
+async function proxy(req, res) {
+    /*
+     * Avoid loopback that could causing server hang.
+     */
+    if (
+        req.headers["via"] == "1.1 bandwidth-hero" &&
+        ["127.0.0.1", "::1"].includes(req.headers["x-forwarded-for"] || req.ip)
+    )
+        return redirect(req, res);
+    try {
+        let origin = await undici.request(req.params.url, {
+            headers: {
+                ...pick(req.headers, ["cookie", "dnt", "referer", "range"]),
+                "user-agent": "Bandwidth-Hero Compressor",
+                "x-forwarded-for": req.headers["x-forwarded-for"] || req.ip,
+                via: "1.1 bandwidth-hero",
+            },
+            maxRedirections: 4
+        });
+        _onRequestResponse(origin, req, res);
+    } catch (err) {
+        _onRequestError(req, res, err);
     }
-  });
-
-  if (shouldCompress(req)) {
-    return compress(req, reply, origin);
-  } else {
-    reply.header("x-proxy-bypass", 1);
-
-    for (const headerName of ["accept-ranges", "content-type", "content-length", "content-range"]) {
-      if (headerName in origin.headers) reply.header(headerName, origin.headers[headerName]);
-    }
-
-    return reply.send(origin.body);
-  }
 }
+
+function _onRequestError(req, res, err) {
+    // Ignore invalid URL.
+    if (err.code === "ERR_INVALID_URL") return res.status(400).send("Invalid URL");
+
+    /*
+     * When there's a real error, Redirect then destroy the stream immediately.
+     */
+    redirect(req, res);
+    console.error(err);
+}
+
+async function _onRequestResponse(origin, req, res) {
+    if (origin.statusCode >= 400)
+        return redirect(req, res);
+
+    // handle redirects
+    if (origin.statusCode >= 300 && origin.headers.location)
+        return redirect(req, res);
+
+    copyHeaders(origin, res);
+    res.header("content-encoding", "identity");
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Cross-Origin-Resource-Policy", "cross-origin");
+    res.header("Cross-Origin-Embedder-Policy", "unsafe-none");
+    req.params.originType = origin.headers["content-type"] || "";
+    req.params.originSize = origin.headers["content-length"] || "0";
+
+    origin.body.on('error', _ => req.socket.destroy());
+
+    if (shouldCompress(req)) {
+        /*
+         * sharp support stream. So pipe it.
+         */
+        return compress(req, res, origin);
+    } else {
+        /*
+         * Downloading then uploading the buffer to the client is not a good idea though,
+         * It would better if you pipe the incomming buffer to client directly.
+         */
+
+        res.header("x-proxy-bypass", 1);
+
+        for (const headerName of ["accept-ranges", "content-type", "content-length", "content-range"]) {
+            if (headerName in origin.headers)
+                res.header(headerName, origin.headers[headerName]);
+        }
+
+        return res.send(origin.body)
+    }
+}
+
 
 module.exports = proxy;
