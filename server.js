@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+
 const fastify = require('fastify')({ logger: true });
 const params = require('./src/params');
 const proxy = require('./src/proxy');
@@ -25,11 +26,12 @@ fastify.get('/favicon.ico', async (request, reply) => {
 // Start the server
 const start = async () => {
   try {
-    await fastify.listen(PORT, '0.0.0.0');
+    await fastify.listen({ port: PORT }); // Use an object here
     fastify.log.info(`server listening on ${fastify.server.address().port}`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
   }
 };
+
 start();
